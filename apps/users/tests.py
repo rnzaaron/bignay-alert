@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 
 from rest_framework.test import APIClient
 
+from apps.activity_logs.models import ActivityLog
 from .models import UserProfile
 from .permissions import (
     IsResident,
@@ -42,6 +43,14 @@ class UserRegistrationTests(TestCase):
         self.assertEqual(profile.contact_number, '09123456789')
         self.assertEqual(profile.address, 'Valenzuela City')
 
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                user=user,
+                action='USER_REGISTERED',
+                related_record_id=str(user.pk),
+            ).exists()
+        )
+
 
 class UserAuthenticationTests(TestCase):
 
@@ -73,6 +82,14 @@ class UserAuthenticationTests(TestCase):
         self.assertEqual(response.data['role'], 'RESIDENT')
         self.assertIsNotNone(self.client.session.session_key)
 
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                user=self.user,
+                action='USER_LOGIN',
+                related_record_id=str(self.user.pk),
+            ).exists()
+        )
+
     def test_invalid_login(self):
         response = self.client.post(
             '/api/users/login/',
@@ -102,6 +119,14 @@ class UserAuthenticationTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                user=self.user,
+                action='USER_LOGOUT',
+                related_record_id=str(self.user.pk),
+            ).exists()
+        )
 
         profile_response = self.client.get(
             '/api/users/profile/',
@@ -162,6 +187,14 @@ class UserProfileTests(TestCase):
         self.assertEqual(
             self.user.profile.address,
             'Updated Valenzuela City',
+        )
+
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                user=self.user,
+                action='USER_PROFILE_UPDATED',
+                related_record_id=str(self.user.profile.pk),
+            ).exists()
         )
 
     def test_unauthenticated_user_cannot_view_profile(self):
@@ -242,4 +275,3 @@ class RolePermissionTests(TestCase):
         self.assertTrue(IsAdministrator().has_permission(request, None))
         self.assertFalse(IsResident().has_permission(request, None))
         self.assertFalse(IsResponder().has_permission(request, None))
-
