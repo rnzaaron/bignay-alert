@@ -1,8 +1,10 @@
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.activity_logs.models import ActivityLog
 from apps.users.models import UserProfile
 
 from .models import Incident
@@ -72,10 +74,16 @@ class IncidentAPITests(APITestCase):
         self.assertEqual(response.data['reporter'], self.resident.username)
         self.assertEqual(response.data['status'], 'SUBMITTED')
 
+        submitted_incident = Incident.objects.get(
+            reporter=self.resident,
+            incident_type='MEDICAL',
+        )
+
         self.assertTrue(
-            Incident.objects.filter(
-                reporter=self.resident,
-                incident_type='MEDICAL',
+            ActivityLog.objects.filter(
+                user=self.resident,
+                action='INCIDENT_SUBMITTED',
+                related_record_id=str(submitted_incident.pk),
             ).exists()
         )
 
@@ -125,6 +133,14 @@ class IncidentAPITests(APITestCase):
 
         self.incident.refresh_from_db()
         self.assertEqual(self.incident.status, 'VERIFIED')
+
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                user=self.admin,
+                action='INCIDENT_STATUS_UPDATED',
+                related_record_id=str(self.incident.pk),
+            ).exists()
+        )
 
     def test_cancellation_requires_a_reason(self):
         self.client.force_authenticate(user=self.admin)

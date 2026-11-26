@@ -1,6 +1,7 @@
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
 
+from rest_framework import generics
+
+from apps.activity_logs.services import log_activity
 from apps.users.permissions import IsAdministrator, IsResident
 
 from .models import Incident
@@ -23,17 +24,25 @@ class IncidentListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         user = self.request.user
 
-        # Administrators can view all incidents.
         if user.is_superuser or IsAdministrator().has_permission(
             self.request, self
         ):
             return Incident.objects.all()
 
-        # Residents can only view incidents they reported.
         return Incident.objects.filter(reporter=user)
 
     def perform_create(self, serializer):
-        serializer.save(reporter=self.request.user)
+        incident = serializer.save(reporter=self.request.user)
+
+        log_activity(
+            user=self.request.user,
+            action='INCIDENT_SUBMITTED',
+            description=(
+                f'{self.request.user.username} submitted a '
+                f'{incident.incident_type} incident.'
+            ),
+            related_record_id=incident.pk,
+        )
 
 
 class IncidentDetailView(generics.RetrieveAPIView):
@@ -58,3 +67,20 @@ class IncidentStatusUpdateView(generics.UpdateAPIView):
     permission_classes = [IsAdministrator]
     http_method_names = ['patch', 'options']
     lookup_field = 'pk'
+
+    def perform_update(self, serializer):
+        incident = serializer.instance
+        previous_status = incident.status
+
+        incident = serializer.save()
+
+        if previous_status != incident.status:
+            log_activity(
+                user=self.request.user,
+                action='INCIDENT_STATUS_UPDATED',
+                description=(
+                    f'Incident {incident.pk} status changed from '
+                    f'{previous_status} to {incident.status}.'
+                ),
+                related_record_id=incident.pk,
+            )
