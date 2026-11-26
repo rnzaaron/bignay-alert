@@ -1,3 +1,8 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
 
-urlpatterns = []
+from .views import ResponderProfileViewSet
+
+router = DefaultRouter()
+router.register('', ResponderProfileViewSet, basename='responder')
+
+urlpatterns = router.urls
